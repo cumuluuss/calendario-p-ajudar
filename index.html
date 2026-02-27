@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Gestor de Rotinas</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f4f4f4;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    form {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    input,
+    select,
+    button {
+      margin: 5px;
+      padding: 5px;
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .day {
+      background: white;
+      min-height: 60px;
+      border-radius: 6px;
+      padding: 5px;
+      font-size: 12px;
+      position: relative;
+    }
+
+    .day-number {
+      font-weight: bold;
+    }
+
+    .color-layer {
+      position: absolute;
+      inset: 0;
+      opacity: 0.4;
+      border-radius: 6px;
+    }
+
+    .month {
+      margin-bottom: 30px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Gestor de Rotinas</h1>
+
+  <form id="routineForm">
+    <select id="type">
+      <option value="diaria">Diária</option>
+      <option value="semanal">Semanal</option>
+      <option value="mensal">Mensal</option>
+    </select>
+
+    <input type="text" id="name" placeholder="Nome da rotina" required>
+
+    <select id="day" class="hidden">
+      <option value="0">Dom</option>
+      <option value="1">Seg</option>
+      <option value="2">Ter</option>
+      <option value="3">Qua</option>
+      <option value="4">Qui</option>
+      <option value="5">Sex</option>
+      <option value="6">Sáb</option>
+    </select>
+
+    <input type="number" id="monthDay" class="hidden" min="1" max="31" placeholder="Dia do mês">
+
+    <input type="time" id="time" required>
+
+    <button type="submit">Cadastrar</button>
+  </form>
+
+  <div>
+    <button onclick="renderYear()">Ver Ano</button>
+    <select id="monthSelect" onchange="renderMonth()"></select>
+  </div>
+
+  <div id="calendarContainer"></div>
+
+  <script>
+    const routines = [];
+    const colors = ["#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b", "#845ef7", "#ffa94d"];
+
+    const typeSelect = document.getElementById("type");
+    const daySelect = document.getElementById("day");
+    const monthDayInput = document.getElementById("monthDay");
+
+    typeSelect.onchange = () => {
+      daySelect.classList.toggle("hidden", typeSelect.value !== "semanal");
+      monthDayInput.classList.toggle("hidden", typeSelect.value !== "mensal");
+    };
+
+    document.getElementById("routineForm").onsubmit = e => {
+      e.preventDefault();
+
+      const routine = {
+        type: typeSelect.value,
+        name: document.getElementById("name").value,
+        time: document.getElementById("time").value,
+        day: daySelect.value,
+        monthDay: monthDayInput.value,
+        color: colors[routines.length % colors.length]
+      };
+
+      if (hasConflict(routine)) {
+        alert("Conflito de horário! Precisa de pelo menos 1h entre rotinas.");
+        return;
+      }
+
+      routines.push(routine);
+      renderYear();
+    };
+
+    function timeToMinutes(t) {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    function hasConflict(newRoutine) {
+      const newTime = timeToMinutes(newRoutine.time);
+
+      for (let r of routines) {
+        const rTime = timeToMinutes(r.time);
+        const diff = Math.abs(newTime - rTime);
+
+        if (diff < 60) return true;
+      }
+      return false;
+    }
+
+    function generateCalendar(year, month = null) {
+      const container = document.getElementById("calendarContainer");
+      container.innerHTML = "";
+
+      const months = month !== null ? [month] : [...Array(12).keys()];
+
+      months.forEach(m => {
+        const monthDiv = document.createElement("div");
+        monthDiv.className = "month";
+
+        const title = document.createElement("h3");
+        title.innerText = new Date(year, m).toLocaleString("pt-BR", {month: "long"});
+        monthDiv.appendChild(title);
+
+        const calendar = document.createElement("div");
+        calendar.className = "calendar";
+
+        const daysInMonth = new Date(year, m + 1, 0).getDate();
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const date = new Date(year, m, d);
+
+          const dayDiv = document.createElement("div");
+          dayDiv.className = "day";
+
+          const number = document.createElement("div");
+          number.className = "day-number";
+          number.innerText = d;
+
+          dayDiv.appendChild(number);
+
+          const dayRoutines = getRoutinesForDate(date);
+
+          const hasDaily = dayRoutines.some(r => r.type === "diaria");
+
+          if (!hasDaily) {
+            dayRoutines.forEach(r => {
+              const layer = document.createElement("div");
+              layer.className = "color-layer";
+              layer.style.background = r.color;
+              dayDiv.appendChild(layer);
+            });
+          }
+
+          calendar.appendChild(dayDiv);
+        }
+
+        monthDiv.appendChild(calendar);
+        container.appendChild(monthDiv);
+      });
+    }
+
+    function getRoutinesForDate(date) {
+      return routines.filter(r => {
+        if (r.type === "diaria") return true;
+        if (r.type === "semanal") return date.getDay() == r.day;
+        if (r.type === "mensal") return date.getDate() == r.monthDay;
+      });
+    }
+
+    function renderYear() {
+      generateCalendar(new Date().getFullYear());
+    }
+
+    function renderMonth() {
+      const m = document.getElementById("monthSelect").value;
+      generateCalendar(new Date().getFullYear(), Number(m));
+    }
+
+    const monthSelect = document.getElementById("monthSelect");
+    for (let i = 0; i < 12; i++) {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.innerText = new Date(2024, i).toLocaleString("pt-BR", {month: "long"});
+      monthSelect.appendChild(opt);
+    }
+
+    renderYear();
+  </script>
+
+</body>
+
+</html>
