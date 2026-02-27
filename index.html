@@ -37,6 +37,12 @@
       margin-top: 10px;
     }
 
+    .weekday {
+      font-weight: bold;
+      text-align: center;
+      padding: 5px;
+    }
+
     .day {
       background: white;
       min-height: 60px;
@@ -63,6 +69,17 @@
 
     .hidden {
       display: none;
+    }
+
+    .routine-card {
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .category {
+      margin-bottom: 15px;
     }
   </style>
 </head>
@@ -97,6 +114,9 @@
     <button type="submit">Cadastrar</button>
   </form>
 
+  <h2>Rotinas cadastradas</h2>
+  <div id="routineList"></div>
+
   <div>
     <button onclick="renderYear()">Ver Ano</button>
     <select id="monthSelect" onchange="renderMonth()"></select>
@@ -107,6 +127,7 @@
   <script>
     const routines = [];
     const colors = ["#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b", "#845ef7", "#ffa94d"];
+    const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
     const typeSelect = document.getElementById("type");
     const daySelect = document.getElementById("day");
@@ -124,17 +145,18 @@
         type: typeSelect.value,
         name: document.getElementById("name").value,
         time: document.getElementById("time").value,
-        day: daySelect.value,
-        monthDay: monthDayInput.value,
+        day: Number(daySelect.value),
+        monthDay: Number(monthDayInput.value),
         color: colors[routines.length % colors.length]
       };
 
       if (hasConflict(routine)) {
-        alert("Conflito de horário! Precisa de pelo menos 1h entre rotinas.");
+        alert("Conflito de horário! Rotinas que podem ocorrer no mesmo dia precisam de 1h de diferença.");
         return;
       }
 
       routines.push(routine);
+      renderRoutineList();
       renderYear();
     };
 
@@ -150,9 +172,81 @@
         const rTime = timeToMinutes(r.time);
         const diff = Math.abs(newTime - rTime);
 
-        if (diff < 60) return true;
+        if (diff >= 60) continue;
+
+        if (newRoutine.type === "diaria" || r.type === "diaria") return true;
+        if (newRoutine.type === "semanal" && r.type === "semanal" && newRoutine.day === r.day) return true;
+        if (newRoutine.type === "mensal" && r.type === "mensal" && newRoutine.monthDay === r.monthDay) return true;
+
+        if (
+          (newRoutine.type === "semanal" && r.type === "mensal") ||
+          (newRoutine.type === "mensal" && r.type === "semanal")
+        ) {
+          if (canWeeklyMatchMonthly(newRoutine, r)) return true;
+        }
       }
       return false;
+    }
+
+    function canWeeklyMatchMonthly(a, b) {
+      let weekly = a.type === "semanal" ? a : b;
+      let monthly = a.type === "mensal" ? a : b;
+
+      const year = new Date().getFullYear();
+
+      for (let m = 0; m < 12; m++) {
+        const date = new Date(year, m, monthly.monthDay);
+        if (date.getMonth() === m && date.getDay() === weekly.day) return true;
+      }
+      return false;
+    }
+
+    function renderRoutineCategory(title, list) {
+      if (list.length === 0) return "";
+
+      let html = `<div class="category"><h3>${title}</h3>`;
+
+      list.forEach((r, index) => {
+        let info = "<strong>" + r.name + "</strong> às " + r.time;
+
+        if (r.type === "semanal") info += " — " + weekdays[r.day];
+        if (r.type === "mensal") info += " — dia " + r.monthDay;
+
+        const realIndex = routines.indexOf(r);
+
+        html += `
+      <div class="routine-card" style="border-left:10px solid ${r.color}">
+        ${info}
+        <button onclick="removeRoutine(${realIndex})" style="float:right">remover</button>
+      </div>
+    `;
+      });
+
+      html += "</div>";
+      return html;
+    }
+
+    function renderRoutineList() {
+      const container = document.getElementById("routineList");
+
+      const diarias = routines.filter(r => r.type === "diaria");
+      const semanais = routines.filter(r => r.type === "semanal");
+      const mensais = routines.filter(r => r.type === "mensal");
+
+      container.innerHTML =
+        renderRoutineCategory("Diárias", diarias) +
+        renderRoutineCategory("Semanais", semanais) +
+        renderRoutineCategory("Mensais", mensais);
+
+      if (routines.length === 0) {
+        container.innerHTML = "<p>Nenhuma rotina cadastrada.</p>";
+      }
+    }
+
+    function removeRoutine(index) {
+      routines.splice(index, 1);
+      renderRoutineList();
+      renderYear();
     }
 
     function generateCalendar(year, month = null) {
@@ -172,7 +266,19 @@
         const calendar = document.createElement("div");
         calendar.className = "calendar";
 
+        weekdays.forEach(d => {
+          const wd = document.createElement("div");
+          wd.className = "weekday";
+          wd.innerText = d;
+          calendar.appendChild(wd);
+        });
+
+        const firstDay = new Date(year, m, 1).getDay();
         const daysInMonth = new Date(year, m + 1, 0).getDate();
+
+        for (let i = 0; i < firstDay; i++) {
+          calendar.appendChild(document.createElement("div"));
+        }
 
         for (let d = 1; d <= daysInMonth; d++) {
           const date = new Date(year, m, d);
@@ -183,21 +289,18 @@
           const number = document.createElement("div");
           number.className = "day-number";
           number.innerText = d;
-
           dayDiv.appendChild(number);
 
           const dayRoutines = getRoutinesForDate(date);
 
-          const hasDaily = dayRoutines.some(r => r.type === "diaria");
-
-          if (!hasDaily) {
-            dayRoutines.forEach(r => {
+          dayRoutines
+            .filter(r => r.type !== "diaria")
+            .forEach(r => {
               const layer = document.createElement("div");
               layer.className = "color-layer";
               layer.style.background = r.color;
               dayDiv.appendChild(layer);
             });
-          }
 
           calendar.appendChild(dayDiv);
         }
@@ -210,8 +313,8 @@
     function getRoutinesForDate(date) {
       return routines.filter(r => {
         if (r.type === "diaria") return true;
-        if (r.type === "semanal") return date.getDay() == r.day;
-        if (r.type === "mensal") return date.getDate() == r.monthDay;
+        if (r.type === "semanal") return date.getDay() === r.day;
+        if (r.type === "mensal") return date.getDate() === r.monthDay;
       });
     }
 
@@ -233,6 +336,7 @@
     }
 
     renderYear();
+    renderRoutineList();
   </script>
 
 </body>
