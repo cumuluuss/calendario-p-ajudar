@@ -2,343 +2,310 @@
 <html lang="pt-BR">
 
 <head>
-  <meta charset="UTF-8">
-  <title>Gestor de Rotinas</title>
+<meta charset="UTF-8">
+<title>Gestor de Rotinas</title>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background: #f4f4f4;
-    }
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
+form { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+input, select, button { margin: 5px; padding: 5px; }
 
-    h1 {
-      margin-bottom: 10px;
-    }
+.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
+.weekday { font-weight: bold; text-align: center; padding: 5px; }
 
-    form {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
+.day { background: white; min-height: 60px; border-radius: 6px; padding: 5px; position: relative; }
+.day.non-business { background: #e9ecef; color: #666; }
 
-    input,
-    select,
-    button {
-      margin: 5px;
-      padding: 5px;
-    }
+.day-number { font-weight: bold; }
 
-    .calendar {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 5px;
-      margin-top: 10px;
-    }
+.color-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  border-radius: 6px;
+}
 
-    .weekday {
-      font-weight: bold;
-      text-align: center;
-      padding: 5px;
-    }
-
-    .day {
-      background: white;
-      min-height: 60px;
-      border-radius: 6px;
-      padding: 5px;
-      font-size: 12px;
-      position: relative;
-    }
-
-    .day-number {
-      font-weight: bold;
-    }
-
-    .color-layer {
-      position: absolute;
-      inset: 0;
-      opacity: 0.4;
-      border-radius: 6px;
-    }
-
-    .month {
-      margin-bottom: 30px;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .routine-card {
-      background: white;
-      padding: 8px;
-      border-radius: 6px;
-      margin-bottom: 6px;
-    }
-
-    .category {
-      margin-bottom: 15px;
-    }
-  </style>
+.hidden { display: none; }
+.routine-card { background: white; padding: 8px; border-radius: 6px; margin-bottom: 6px; }
+.category { margin-bottom: 20px; }
+.remove-btn { float: right; }
+</style>
 </head>
 
 <body>
 
-  <h1>Gestor de Rotinas</h1>
+<h1>Gestor de Rotinas</h1>
 
-  <form id="routineForm">
-    <select id="type">
-      <option value="diaria">Diária</option>
-      <option value="semanal">Semanal</option>
-      <option value="mensal">Mensal</option>
-    </select>
+<form id="routineForm">
+<select id="type">
+<option value="diaria">Diária</option>
+<option value="semanal">Semanal</option>
+<option value="mensal">Mensal</option>
+</select>
 
-    <input type="text" id="name" placeholder="Nome da rotina" required>
+<input type="text" id="name" placeholder="Nome da rotina" required>
+<input type="date" id="startDate" class="hidden">
+<input type="number" id="monthDay" class="hidden" min="1" max="31" placeholder="Dia do mês">
+<input type="time" id="time" required>
+<button type="submit">Cadastrar</button>
+</form>
 
-    <select id="day" class="hidden">
-      <option value="0">Dom</option>
-      <option value="1">Seg</option>
-      <option value="2">Ter</option>
-      <option value="3">Qua</option>
-      <option value="4">Qui</option>
-      <option value="5">Sex</option>
-      <option value="6">Sáb</option>
-    </select>
+<h2>Rotinas cadastradas</h2>
+<div id="routineList"></div>
 
-    <input type="number" id="monthDay" class="hidden" min="1" max="31" placeholder="Dia do mês">
+<div>
+<button onclick="renderYear()">Ver Ano</button>
+<select id="monthSelect" onchange="renderMonth()"></select>
+</div>
 
-    <input type="time" id="time" required>
+<div id="calendarContainer"></div>
 
-    <button type="submit">Cadastrar</button>
-  </form>
+<script>
+const routines = [];
+const colors = ["#ff6b6b","#4dabf7","#51cf66","#ffd43b","#845ef7","#ffa94d"];
+const weekdays = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
-  <h2>Rotinas cadastradas</h2>
-  <div id="routineList"></div>
+const typeSelect = document.getElementById("type");
+const monthDayInput = document.getElementById("monthDay");
+const startDateInput = document.getElementById("startDate");
 
-  <div>
-    <button onclick="renderYear()">Ver Ano</button>
-    <select id="monthSelect" onchange="renderMonth()"></select>
-  </div>
+typeSelect.onchange = () => {
+  startDateInput.classList.toggle("hidden", typeSelect.value !== "semanal");
+  monthDayInput.classList.toggle("hidden", typeSelect.value !== "mensal");
+};
 
-  <div id="calendarContainer"></div>
+function normalizeDate(d) {
+  const n = new Date(d);
+  n.setHours(0,0,0,0);
+  return n;
+}
 
-  <script>
-    const routines = [];
-    const colors = ["#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b", "#845ef7", "#ffa94d"];
-    const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+function timeToMinutes(t) {
+  const [h,m] = t.split(":").map(Number);
+  return h*60+m;
+}
 
-    const typeSelect = document.getElementById("type");
-    const daySelect = document.getElementById("day");
-    const monthDayInput = document.getElementById("monthDay");
+function hasConflict(newRoutine) {
+  const newTime = timeToMinutes(newRoutine.time);
+  for (let r of routines) {
+    const diff = Math.abs(newTime - timeToMinutes(r.time));
+    if (diff < 30) return true;
+  }
+  return false;
+}
 
-    typeSelect.onchange = () => {
-      daySelect.classList.toggle("hidden", typeSelect.value !== "semanal");
-      monthDayInput.classList.toggle("hidden", typeSelect.value !== "mensal");
-    };
+document.getElementById("routineForm").onsubmit = e => {
+  e.preventDefault();
 
-    document.getElementById("routineForm").onsubmit = e => {
-      e.preventDefault();
+  let startDate = null;
+  if (startDateInput.value) {
+    const [y,m,d] = startDateInput.value.split("-").map(Number);
+    startDate = normalizeDate(new Date(y,m-1,d));
+  }
 
-      const routine = {
-        type: typeSelect.value,
-        name: document.getElementById("name").value,
-        time: document.getElementById("time").value,
-        day: Number(daySelect.value),
-        monthDay: Number(monthDayInput.value),
-        color: colors[routines.length % colors.length]
-      };
+  const routine = {
+    type: typeSelect.value,
+    name: document.getElementById("name").value,
+    time: document.getElementById("time").value,
+    monthDay: Number(monthDayInput.value),
+    startDate: startDate,
+    color: colors[routines.length % colors.length]
+  };
 
-      if (hasConflict(routine)) {
-        alert("Conflito de horário! Rotinas que podem ocorrer no mesmo dia precisam de 1h de diferença.");
-        return;
-      }
+  if (routine.type === "semanal") {
+    if (!startDate) {
+      alert("Escolha a data inicial.");
+      return;
+    }
+    routine.day = startDate.getDay();
+  }
 
-      routines.push(routine);
-      renderRoutineList();
-      renderYear();
-    };
+  if (hasConflict(routine)) {
+    alert("Conflito de horário. Mantenha 30 minutos de intervalo.");
+    return;
+  }
 
-    function timeToMinutes(t) {
-      const [h, m] = t.split(":").map(Number);
-      return h * 60 + m;
+  routines.push(routine);
+  renderRoutineList();
+  renderYear();
+};
+
+function removeRoutine(index) {
+  routines.splice(index,1);
+  renderRoutineList();
+  renderYear();
+}
+
+function getBrazilHolidays(year) {
+  return [
+    `${year}-01-01`,
+    `${year}-04-21`,
+    `${year}-05-01`,
+    `${year}-09-07`,
+    `${year}-10-12`,
+    `${year}-11-02`,
+    `${year}-11-15`,
+    `${year}-12-25`
+  ];
+}
+
+function isHoliday(date) {
+  return getBrazilHolidays(date.getFullYear())
+    .includes(date.toISOString().split("T")[0]);
+}
+
+function isBusinessDay(date) {
+  return date.getDay() !== 0 && date.getDay() !== 6 && !isHoliday(date);
+}
+
+function adjustToBusinessDay(date) {
+  const d = normalizeDate(date);
+  while (!isBusinessDay(d)) d.setDate(d.getDate()+1);
+  return d;
+}
+
+function getRoutinesForDate(date) {
+  const current = normalizeDate(date);
+
+  return routines.filter(r => {
+
+    if (r.type === "diaria") return false;
+
+    if (r.type === "semanal") {
+      const original = new Date(current);
+      original.setDate(original.getDate() - (original.getDay() - r.day));
+      const adjusted = adjustToBusinessDay(original);
+      if (r.startDate && adjusted < r.startDate) return false;
+      return adjusted.getTime() === current.getTime();
     }
 
-    function hasConflict(newRoutine) {
-      const newTime = timeToMinutes(newRoutine.time);
-
-      for (let r of routines) {
-        const rTime = timeToMinutes(r.time);
-        const diff = Math.abs(newTime - rTime);
-
-        if (diff >= 60) continue;
-
-        if (newRoutine.type === "diaria" || r.type === "diaria") return true;
-        if (newRoutine.type === "semanal" && r.type === "semanal" && newRoutine.day === r.day) return true;
-        if (newRoutine.type === "mensal" && r.type === "mensal" && newRoutine.monthDay === r.monthDay) return true;
-
-        if (
-          (newRoutine.type === "semanal" && r.type === "mensal") ||
-          (newRoutine.type === "mensal" && r.type === "semanal")
-        ) {
-          if (canWeeklyMatchMonthly(newRoutine, r)) return true;
-        }
-      }
-      return false;
+    if (r.type === "mensal") {
+      const original = new Date(current.getFullYear(), current.getMonth(), r.monthDay);
+      if (original.getMonth() !== current.getMonth()) return false;
+      const adjusted = adjustToBusinessDay(original);
+      return adjusted.getTime() === current.getTime();
     }
 
-    function canWeeklyMatchMonthly(a, b) {
-      let weekly = a.type === "semanal" ? a : b;
-      let monthly = a.type === "mensal" ? a : b;
+    return false;
+  });
+}
 
-      const year = new Date().getFullYear();
+function renderRoutineCategory(title, list) {
+  if (list.length === 0) return "";
+  let html = `<div class="category"><h3>${title}</h3>`;
 
-      for (let m = 0; m < 12; m++) {
-        const date = new Date(year, m, monthly.monthDay);
-        if (date.getMonth() === m && date.getDay() === weekly.day) return true;
-      }
-      return false;
-    }
+  list.forEach(r => {
+    const index = routines.indexOf(r);
 
-    function renderRoutineCategory(title, list) {
-      if (list.length === 0) return "";
+    let info = `<strong>${r.name}</strong> às ${r.time}`;
+    if (r.type === "semanal") info += ` — ${weekdays[r.day]}`;
+    if (r.type === "mensal") info += ` — dia ${r.monthDay}`;
+    if (r.startDate) info += ` (a partir de ${r.startDate.toLocaleDateString("pt-BR")})`;
 
-      let html = `<div class="category"><h3>${title}</h3>`;
-
-      list.forEach((r, index) => {
-        let info = "<strong>" + r.name + "</strong> às " + r.time;
-
-        if (r.type === "semanal") info += " — " + weekdays[r.day];
-        if (r.type === "mensal") info += " — dia " + r.monthDay;
-
-        const realIndex = routines.indexOf(r);
-
-        html += `
+    html += `
       <div class="routine-card" style="border-left:10px solid ${r.color}">
         ${info}
-        <button onclick="removeRoutine(${realIndex})" style="float:right">remover</button>
+        <button class="remove-btn" onclick="removeRoutine(${index})">Remover</button>
       </div>
     `;
+  });
+
+  html += "</div>";
+  return html;
+}
+
+function renderRoutineList() {
+  const container = document.getElementById("routineList");
+
+  const diarias = routines.filter(r => r.type === "diaria");
+  const semanais = routines.filter(r => r.type === "semanal");
+  const mensais = routines.filter(r => r.type === "mensal");
+
+  container.innerHTML =
+    renderRoutineCategory("Diárias", diarias) +
+    renderRoutineCategory("Semanais", semanais) +
+    renderRoutineCategory("Mensais", mensais);
+
+  if (routines.length === 0) {
+    container.innerHTML = "<p>Nenhuma rotina cadastrada.</p>";
+  }
+}
+
+function generateCalendar(year, month=null) {
+  const container = document.getElementById("calendarContainer");
+  container.innerHTML = "";
+
+  const months = month!==null ? [month] : [...Array(12).keys()];
+
+  months.forEach(m => {
+    const monthDiv = document.createElement("div");
+    const title = document.createElement("h3");
+    title.innerText = new Date(year,m).toLocaleString("pt-BR",{month:"long"});
+    monthDiv.appendChild(title);
+
+    const calendar = document.createElement("div");
+    calendar.className = "calendar";
+
+    weekdays.forEach(d=>{
+      const wd=document.createElement("div");
+      wd.className="weekday";
+      wd.innerText=d;
+      calendar.appendChild(wd);
+    });
+
+    const firstDay=new Date(year,m,1).getDay();
+    const daysInMonth=new Date(year,m+1,0).getDate();
+
+    for(let i=0;i<firstDay;i++) calendar.appendChild(document.createElement("div"));
+
+    for(let d=1;d<=daysInMonth;d++){
+      const date=new Date(year,m,d);
+      const dayDiv=document.createElement("div");
+      dayDiv.className="day";
+
+      if(!isBusinessDay(date)) dayDiv.classList.add("non-business");
+
+      const number=document.createElement("div");
+      number.className="day-number";
+      number.innerText=d;
+      dayDiv.appendChild(number);
+
+      const dayRoutines=getRoutinesForDate(date);
+      dayRoutines.forEach(r=>{
+        const layer=document.createElement("div");
+        layer.className="color-layer";
+        layer.style.background=r.color;
+        dayDiv.appendChild(layer);
       });
 
-      html += "</div>";
-      return html;
+      calendar.appendChild(dayDiv);
     }
 
-    function renderRoutineList() {
-      const container = document.getElementById("routineList");
+    monthDiv.appendChild(calendar);
+    container.appendChild(monthDiv);
+  });
+}
 
-      const diarias = routines.filter(r => r.type === "diaria");
-      const semanais = routines.filter(r => r.type === "semanal");
-      const mensais = routines.filter(r => r.type === "mensal");
+function renderYear() {
+  generateCalendar(new Date().getFullYear());
+}
 
-      container.innerHTML =
-        renderRoutineCategory("Diárias", diarias) +
-        renderRoutineCategory("Semanais", semanais) +
-        renderRoutineCategory("Mensais", mensais);
+function renderMonth() {
+  const m=document.getElementById("monthSelect").value;
+  generateCalendar(new Date().getFullYear(),Number(m));
+}
 
-      if (routines.length === 0) {
-        container.innerHTML = "<p>Nenhuma rotina cadastrada.</p>";
-      }
-    }
+const monthSelect=document.getElementById("monthSelect");
+for(let i=0;i<12;i++){
+  const opt=document.createElement("option");
+  opt.value=i;
+  opt.innerText=new Date(2026,i).toLocaleString("pt-BR",{month:"long"});
+  monthSelect.appendChild(opt);
+}
 
-    function removeRoutine(index) {
-      routines.splice(index, 1);
-      renderRoutineList();
-      renderYear();
-    }
-
-    function generateCalendar(year, month = null) {
-      const container = document.getElementById("calendarContainer");
-      container.innerHTML = "";
-
-      const months = month !== null ? [month] : [...Array(12).keys()];
-
-      months.forEach(m => {
-        const monthDiv = document.createElement("div");
-        monthDiv.className = "month";
-
-        const title = document.createElement("h3");
-        title.innerText = new Date(year, m).toLocaleString("pt-BR", {month: "long"});
-        monthDiv.appendChild(title);
-
-        const calendar = document.createElement("div");
-        calendar.className = "calendar";
-
-        weekdays.forEach(d => {
-          const wd = document.createElement("div");
-          wd.className = "weekday";
-          wd.innerText = d;
-          calendar.appendChild(wd);
-        });
-
-        const firstDay = new Date(year, m, 1).getDay();
-        const daysInMonth = new Date(year, m + 1, 0).getDate();
-
-        for (let i = 0; i < firstDay; i++) {
-          calendar.appendChild(document.createElement("div"));
-        }
-
-        for (let d = 1; d <= daysInMonth; d++) {
-          const date = new Date(year, m, d);
-
-          const dayDiv = document.createElement("div");
-          dayDiv.className = "day";
-
-          const number = document.createElement("div");
-          number.className = "day-number";
-          number.innerText = d;
-          dayDiv.appendChild(number);
-
-          const dayRoutines = getRoutinesForDate(date);
-
-          dayRoutines
-            .filter(r => r.type !== "diaria")
-            .forEach(r => {
-              const layer = document.createElement("div");
-              layer.className = "color-layer";
-              layer.style.background = r.color;
-              dayDiv.appendChild(layer);
-            });
-
-          calendar.appendChild(dayDiv);
-        }
-
-        monthDiv.appendChild(calendar);
-        container.appendChild(monthDiv);
-      });
-    }
-
-    function getRoutinesForDate(date) {
-      return routines.filter(r => {
-        if (r.type === "diaria") return true;
-        if (r.type === "semanal") return date.getDay() === r.day;
-        if (r.type === "mensal") return date.getDate() === r.monthDay;
-      });
-    }
-
-    function renderYear() {
-      generateCalendar(new Date().getFullYear());
-    }
-
-    function renderMonth() {
-      const m = document.getElementById("monthSelect").value;
-      generateCalendar(new Date().getFullYear(), Number(m));
-    }
-
-    const monthSelect = document.getElementById("monthSelect");
-    for (let i = 0; i < 12; i++) {
-      const opt = document.createElement("option");
-      opt.value = i;
-      opt.innerText = new Date(2024, i).toLocaleString("pt-BR", {month: "long"});
-      monthSelect.appendChild(opt);
-    }
-
-    renderYear();
-    renderRoutineList();
-  </script>
+renderYear();
+renderRoutineList();
+</script>
 
 </body>
-
 </html>
